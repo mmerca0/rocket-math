@@ -1,0 +1,23 @@
+# Weekly dependency updates: one grouped pull request for npm packages
+# and a separate grouped pull request for GitHub Actions.
+# Security fixes may still arrive as separate PRs — that's intentional.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      github-actions:
+        patterns: ["*"]

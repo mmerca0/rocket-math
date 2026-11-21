@@ -1,0 +1,20 @@
+# Store text files with LF line endings in Git, whatever the OS.
+# Git converts on checkout only if you ask it to; editors on Mac and Windows handle LF fine.
+* text=auto eol=lf
+
+# Windows-only scripts need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.avif binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

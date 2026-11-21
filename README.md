@@ -1,4 +1,31 @@
-# app-template
+# Math Rocket
+
+A space math game for kids. A problem appears at the bottom; asteroids carrying answers drift down. Tap the right one to blast it. Wrong taps and missed right answers cost a shield (three per round).
+
+- **12 steps:** add/subtract within 10 → 20 → two-digit (without, then with regrouping) → times tables → division facts → 9a/9b multi-digit multiplication → 10a/10b long division.
+- **Levels 9a–10b** use a "boss asteroid" and a big number pad instead, because picking from close numbers is not a fair test at that level. 5 problems per round, no clock, very slow fall, so there's time for paper.
+- **Move up** after a round with ≥ 80% accuracy, at least 8 problems answered (5 in boss rounds) and a shield left. Never moves back down. Any unlocked level can be replayed.
+- **Everything stays on the device** (localStorage): pilots (name only), unlocked levels and the top 10 scores per level. No accounts, no network calls.
+
+**Tip for iPad/iPhone:** open the site in Safari → Share → **Add to Home Screen**, and play from that icon. Safari may clear saved data for websites you haven't opened in 7 days. Home Screen apps are exempt from that rule.
+
+### Where things live
+
+| What                                        | File                   |
+| ------------------------------------------- | ---------------------- |
+| Levels, fall speeds, round length           | `src/game/levels.ts`   |
+| Problem generator + plausible wrong answers | `src/game/problems.ts` |
+| Points, accuracy, "move up?" rule           | `src/game/scoring.ts`  |
+| Round rules (taps, shields, clock)          | `src/game/round.ts`    |
+| Saving players and high scores              | `src/game/storage.ts`  |
+| Screens                                     | `src/components/`      |
+| Sound effects (generated in code)           | `src/lib/sound.ts`     |
+
+Too fast or too slow for your kid? Change `fallSeconds` in `src/game/levels.ts`.
+
+---
+
+_Built from the app-template:_
 
 A starter for personal web apps. Copy it, rename one line, deploy.
 

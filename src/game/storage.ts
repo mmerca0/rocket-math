@@ -1,13 +1,20 @@
 /**
- * Everything saved on the device: players, unlocked levels, high scores, mute.
- * Pure functions that take the old save and return a new one, plus safe
- * load/save helpers for localStorage. Nothing ever leaves the device.
+ * Everything saved on the device: players, unlocked levels, high scores, mute,
+ * plus what the family leaderboard sync needs (family code, scores waiting
+ * to upload). Pure functions that take the old save and return a new one,
+ * plus safe load/save helpers for localStorage.
+ *
+ * The device save is always the source of truth for play: the game never
+ * waits for the network. See src/game/sync.ts for how it merges with the
+ * shared leaderboard.
  */
 import { LEVELS, isLevelId, type LevelId } from "./levels";
 
 export const STORAGE_KEY = "math-rocket:v1";
 export const MAX_HIGH_SCORES = 10;
 export const MAX_NAME_LENGTH = 16;
+/** Most scores kept waiting for upload while offline (newest kept). */
+export const MAX_PENDING_SCORES = 200;
 
 export interface Player {
   id: string;
@@ -18,13 +25,23 @@ export interface Player {
 }
 
 export interface HighScore {
+  /**
+   * Unique id (UUID), also used on the server so uploading twice is
+   * harmless. Missing on scores saved before syncing existed.
+   */
+  id?: string;
   playerId: string;
   name: string;
   score: number;
   level: LevelId;
   /** ISO date-time. */
   date: string;
+  /** Percent correct, 0–100. Missing on older scores. */
+  accuracy?: number;
 }
+
+/** A round's score waiting to be uploaded to the family leaderboard. */
+export type PendingScore = HighScore & { id: string };
 
 export interface SaveData {
   version: 1;
@@ -32,6 +49,14 @@ export interface SaveData {
   activePlayerId: string | null;
   muted: boolean;
   highScores: Partial<Record<LevelId, HighScore[]>>;
+  /** Scores not yet confirmed by the server (the "outbox"). */
+  pendingScores: PendingScore[];
+  /** Family leaderboard code, or null if not entered on this device. */
+  familyCode: string | null;
+  /** True after "Not now" on the family code prompt. */
+  familyPromptDismissed: boolean;
+  /** Pilots removed on this device, so syncing doesn't download them again. */
+  hiddenPilotIds: string[];
 }
 
 export function emptySave(): SaveData {
@@ -41,6 +66,10 @@ export function emptySave(): SaveData {
     activePlayerId: null,
     muted: false,
     highScores: {},
+    pendingScores: [],
+    familyCode: null,
+    familyPromptDismissed: false,
+    hiddenPilotIds: [],
   };
 }
 
@@ -76,7 +105,11 @@ export function addPlayer(
   return { ...data, players: [...data.players, player], activePlayerId: id };
 }
 
-/** Removes the player and their high scores. */
+/**
+ * Removes the player and their high scores from this device. Their scores on
+ * the family leaderboard stay; they're remembered as hidden so the next sync
+ * doesn't bring them back.
+ */
 export function removePlayer(data: SaveData, id: string): SaveData {
   const highScores: SaveData["highScores"] = {};
   for (const [level, list] of Object.entries(data.highScores)) {
@@ -88,6 +121,10 @@ export function removePlayer(data: SaveData, id: string): SaveData {
     players: data.players.filter((p) => p.id !== id),
     activePlayerId: data.activePlayerId === id ? null : data.activePlayerId,
     highScores,
+    pendingScores: data.pendingScores.filter((s) => s.playerId !== id),
+    hiddenPilotIds: data.hiddenPilotIds.includes(id)
+      ? data.hiddenPilotIds
+      : [...data.hiddenPilotIds, id],
   };
 }
 
@@ -97,6 +134,20 @@ export function selectPlayer(data: SaveData, id: string | null): SaveData {
 
 export function setMuted(data: SaveData, muted: boolean): SaveData {
   return { ...data, muted };
+}
+
+// ---------- Family code ----------
+
+export const MAX_FAMILY_CODE_LENGTH = 100;
+
+/** Saves the family code (an empty code turns sharing off). */
+export function setFamilyCode(data: SaveData, raw: string): SaveData {
+  const code = raw.trim().slice(0, MAX_FAMILY_CODE_LENGTH);
+  return { ...data, familyCode: code || null, familyPromptDismissed: true };
+}
+
+export function dismissFamilyPrompt(data: SaveData): SaveData {
+  return { ...data, familyPromptDismissed: true };
 }
 
 // ---------- High scores ----------
@@ -136,10 +187,14 @@ export function insertHighScore(
 // ---------- Finishing a round ----------
 
 export interface RoundRecord {
+  /** New unique id (UUID) for this score. */
+  scoreId: string;
   playerId: string;
   level: LevelId;
   step: number;
   score: number;
+  /** Fraction correct, 0–1. */
+  accuracy: number;
   earnedNextLevel: boolean;
   date: Date;
 }
@@ -152,18 +207,35 @@ export interface RoundOutcome {
   unlockedStep: number | null;
 }
 
-/** Saves the score and unlocks the next step. Never lowers unlockedStep. */
+/**
+ * Saves the score (locally, and in the upload outbox) and unlocks the next
+ * step. Never lowers unlockedStep.
+ */
 export function recordRound(data: SaveData, r: RoundRecord): RoundOutcome {
   const player = data.players.find((p) => p.id === r.playerId);
   if (!player) return { data, rank: null, unlockedStep: null };
 
-  const { data: withScore, rank } = insertHighScore(data, {
+  const entry: PendingScore = {
+    id: r.scoreId,
     playerId: player.id,
     name: player.name,
     score: r.score,
     level: r.level,
     date: r.date.toISOString(),
-  });
+    accuracy: Math.round(Math.min(1, Math.max(0, r.accuracy)) * 100),
+  };
+  const { data: withLocal, rank } = insertHighScore(data, entry);
+  // Every scoring round goes to the family board, even if it didn't make
+  // this device's top 10 — it might still beat another device's scores.
+  const withScore =
+    r.score > 0
+      ? {
+          ...withLocal,
+          pendingScores: [...withLocal.pendingScores, entry].slice(
+            -MAX_PENDING_SCORES,
+          ),
+        }
+      : withLocal;
 
   const target = Math.min(r.step + 1, LEVELS.length);
   const unlocks = r.earnedNextLevel && target > player.unlockedStep;
@@ -216,12 +288,30 @@ export function parseSave(raw: string | null): SaveData {
     const activePlayerId = players.some((p) => p.id === v.activePlayerId)
       ? (v.activePlayerId ?? null)
       : null;
+    const pendingScores = Array.isArray(v.pendingScores)
+      ? v.pendingScores.filter(
+          (s): s is PendingScore =>
+            !!s &&
+            typeof s.id === "string" &&
+            typeof s.playerId === "string" &&
+            typeof s.score === "number" &&
+            typeof s.date === "string" &&
+            isLevelId(s.level),
+        )
+      : [];
     return {
       version: 1,
       players,
       activePlayerId,
       muted: v.muted === true,
       highScores,
+      pendingScores,
+      familyCode:
+        typeof v.familyCode === "string" && v.familyCode ? v.familyCode : null,
+      familyPromptDismissed: v.familyPromptDismissed === true,
+      hiddenPilotIds: Array.isArray(v.hiddenPilotIds)
+        ? v.hiddenPilotIds.filter((id): id is string => typeof id === "string")
+        : [],
     };
   } catch {
     return emptySave();

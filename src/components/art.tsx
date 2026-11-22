@@ -41,6 +41,9 @@ export const ROCK_COLORS = [
   { fill: "#fcd34d", dark: "#d97706" },
 ] as const;
 
+/** The big grey "boss" rock in typing levels. */
+export const BOSS_ROCK_COLOR = { fill: "#94a3b8", dark: "#475569" } as const;
+
 export function AsteroidShape({
   color,
 }: {
@@ -75,35 +78,6 @@ export function Shield({ on }: { on: boolean }) {
         fill={on ? "#22d3ee" : "transparent"}
         stroke={on ? "#a5f3fc" : "#475569"}
         strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
-export function Planet({ color, locked }: { color: string; locked: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 100 70"
-      className="h-16 w-24 sm:h-20 sm:w-28"
-      aria-hidden="true"
-    >
-      <ellipse
-        cx="50"
-        cy="38"
-        rx="46"
-        ry="10"
-        fill="none"
-        stroke={locked ? "#94a3b8" : "#fef3c7"}
-        strokeWidth="4"
-        opacity="0.8"
-      />
-      <circle cx="50" cy="35" r="26" fill={locked ? "#94a3b8" : color} />
-      <circle cx="41" cy="27" r="6" fill="#fff" opacity="0.35" />
-      <path
-        d="M8 38 A46 10 0 0 0 92 38"
-        fill="none"
-        stroke={locked ? "#94a3b8" : "#fef3c7"}
-        strokeWidth="4"
       />
     </svg>
   );

@@ -3,21 +3,28 @@
 /**
  * The whole game in one client component: decides which screen to show and
  * saves results on the device. All game rules live in src/game/.
+ *
+ * The family leaderboard syncs in the background (src/lib/sync.ts). Play
+ * never waits for it.
  */
 import { useEffect, useState } from "react";
 import { site } from "@/config/site";
 import { LEVELS, type Level, type LevelId } from "@/game/levels";
 import type { RoundState } from "@/game/round";
-import { earnedNextLevel } from "@/game/scoring";
+import { accuracy, earnedNextLevel } from "@/game/scoring";
 import {
   addPlayer,
+  dismissFamilyPrompt,
   recordRound,
   removePlayer,
   selectPlayer,
+  setFamilyCode,
   setMuted,
   type RoundOutcome,
 } from "@/game/storage";
+import { newId } from "@/lib/id";
 import { setSoundMuted, unlockSound } from "@/lib/sound";
+import { syncNow } from "@/lib/sync";
 import { useSaveData } from "@/lib/useSaveData";
 import { GameScreen } from "./GameScreen";
 import { HighScores } from "./HighScores";
@@ -31,12 +38,6 @@ type View =
   | { name: "summary"; result: RoundResult }
   | { name: "scores"; level: LevelId; back: "home" | "players" | "summary" };
 
-function newId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 export function MathRocketApp() {
   const [data, update] = useSaveData();
   const [view, setView] = useState<View>({ name: "home" });
@@ -45,6 +46,17 @@ export function MathRocketApp() {
   useEffect(() => {
     if (data) setSoundMuted(data.muted);
   }, [data]);
+
+  // Sync with the family leaderboard when the app opens, when the family
+  // code changes, and whenever the device comes back online.
+  const familyCode = data?.familyCode ?? null;
+  useEffect(() => {
+    if (!familyCode) return;
+    void syncNow();
+    const onOnline = () => void syncNow();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [familyCode]);
 
   if (!data) {
     // Server render / first paint, before the device save is read.
@@ -59,6 +71,8 @@ export function MathRocketApp() {
 
   const player = data.players.find((p) => p.id === data.activePlayerId) ?? null;
   const toggleMute = () => update((d) => setMuted(d, !d.muted));
+  const saveFamilyCode = (code: string) =>
+    update((d) => setFamilyCode(d, code));
 
   function play(level: Level) {
     unlockSound(); // must happen inside a tap for iPad/iPhone
@@ -75,10 +89,12 @@ export function MathRocketApp() {
     let outcome: RoundOutcome | null = null;
     update((d) => {
       outcome = recordRound(d, {
+        scoreId: newId(),
         playerId: player.id,
         level: level.id,
         step: level.step,
         score: state.stats.score,
+        accuracy: accuracy(state.stats),
         earnedNextLevel: earned,
         date: new Date(),
       });
@@ -97,6 +113,7 @@ export function MathRocketApp() {
     };
     setLastSummary(result);
     setView({ name: "summary", result });
+    void syncNow(); // upload in the background; never waits
   }
 
   if (view.name === "scores") {
@@ -104,6 +121,7 @@ export function MathRocketApp() {
       <HighScores
         data={data}
         initialLevel={view.level}
+        onSetFamilyCode={saveFamilyCode}
         onBack={() =>
           setView(
             view.back === "summary" && lastSummary
@@ -126,11 +144,14 @@ export function MathRocketApp() {
         onAdd={(name) => {
           update((d) => addPlayer(d, name, newId(), new Date()));
           setView({ name: "home" });
+          void syncNow();
         }}
         onRemove={(id) => update((d) => removePlayer(d, id))}
         onHighScores={() =>
           setView({ name: "scores", level: "1", back: "players" })
         }
+        onSetFamilyCode={saveFamilyCode}
+        onDismissFamilyPrompt={() => update(dismissFamilyPrompt)}
       />
     );
   }

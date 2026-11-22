@@ -10,6 +10,7 @@ import {
   parseSave,
   recordRound,
   removePlayer,
+  setFamilyCode,
   writeSave,
   type SaveData,
 } from "./storage";
@@ -38,6 +39,8 @@ describe("players", () => {
       level: "1",
       step: 1,
       score: 100,
+      scoreId: "00000000-0000-4000-8000-000000000001",
+      accuracy: 0.9,
       earnedNextLevel: false,
       date: now,
     }).data;
@@ -55,6 +58,8 @@ describe("rounds and unlocking", () => {
       level: "1",
       step: 1,
       score: 50,
+      scoreId: "00000000-0000-4000-8000-000000000001",
+      accuracy: 0.9,
       earnedNextLevel: true,
       date: now,
     });
@@ -69,6 +74,8 @@ describe("rounds and unlocking", () => {
       level: "2",
       step: 2,
       score: 10,
+      scoreId: "00000000-0000-4000-8000-000000000001",
+      accuracy: 0.9,
       earnedNextLevel: true,
       date: now,
     });
@@ -79,6 +86,8 @@ describe("rounds and unlocking", () => {
       level: "6",
       step: 6,
       score: 10,
+      scoreId: "00000000-0000-4000-8000-000000000001",
+      accuracy: 0.9,
       earnedNextLevel: false,
       date: now,
     });
@@ -92,6 +101,8 @@ describe("rounds and unlocking", () => {
       level: "10b",
       step: 12,
       score: 10,
+      scoreId: "00000000-0000-4000-8000-000000000001",
+      accuracy: 0.9,
       earnedNextLevel: true,
       date: now,
     });
@@ -172,5 +183,62 @@ describe("saving on the device", () => {
     expect(loadSave(throwing)).toEqual(emptySave());
     expect(writeSave(throwing, emptySave())).toBe(false);
     expect(loadSave(null)).toEqual(emptySave());
+  });
+});
+
+describe("leaderboard sync bookkeeping", () => {
+  const round = {
+    scoreId: "00000000-0000-4000-8000-0000000000aa",
+    playerId: "p1",
+    level: "1" as const,
+    step: 1,
+    score: 80,
+    accuracy: 0.876,
+    earnedNextLevel: false,
+    date: now,
+  };
+
+  it("queues each scoring round for upload, with accuracy as a percent", () => {
+    const d = recordRound(withPilot(), round).data;
+    expect(d.pendingScores).toHaveLength(1);
+    expect(d.pendingScores[0]).toMatchObject({
+      id: round.scoreId,
+      playerId: "p1",
+      score: 80,
+      accuracy: 88,
+    });
+    expect(d.highScores["1"]?.[0]?.id).toBe(round.scoreId);
+  });
+
+  it("does not queue zero-point rounds", () => {
+    const d = recordRound(withPilot(), { ...round, score: 0 }).data;
+    expect(d.pendingScores).toHaveLength(0);
+  });
+
+  it("removing a pilot hides them and drops their queued scores", () => {
+    let d = recordRound(withPilot(), round).data;
+    d = removePlayer(d, "p1");
+    expect(d.pendingScores).toHaveLength(0);
+    expect(d.hiddenPilotIds).toEqual(["p1"]);
+  });
+
+  it("stores a trimmed family code; blank turns sharing off", () => {
+    expect(setFamilyCode(emptySave(), "  rocket  ").familyCode).toBe("rocket");
+    expect(setFamilyCode(emptySave(), "   ").familyCode).toBeNull();
+  });
+
+  it("loads saves from before syncing existed", () => {
+    const old = JSON.stringify({
+      version: 1,
+      players: [{ id: "p1", name: "Leo", unlockedStep: 3 }],
+      activePlayerId: "p1",
+      muted: false,
+      highScores: {},
+    });
+    const d = parseSave(old);
+    expect(d.pendingScores).toEqual([]);
+    expect(d.familyCode).toBeNull();
+    expect(d.hiddenPilotIds).toEqual([]);
+    expect(d.players).toHaveLength(1);
   });
 });

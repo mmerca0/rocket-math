@@ -5,6 +5,7 @@ import { levelByStep } from "@/game/levels";
 import { MAX_NAME_LENGTH, nameProblem, type SaveData } from "@/game/storage";
 import { site } from "@/config/site";
 import { Rocket } from "./art";
+import { FamilyCodePrompt } from "./FamilyCode";
 import { Button, Screen } from "./ui";
 
 export function PlayerPicker({
@@ -13,12 +14,16 @@ export function PlayerPicker({
   onAdd,
   onRemove,
   onHighScores,
+  onSetFamilyCode,
+  onDismissFamilyPrompt,
 }: {
   data: SaveData;
   onPick: (id: string) => void;
   onAdd: (name: string) => void;
   onRemove: (id: string) => void;
   onHighScores: () => void;
+  onSetFamilyCode: (code: string) => void;
+  onDismissFamilyPrompt: () => void;
 }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,13 @@ export function PlayerPicker({
         </p>
       </header>
 
+      {!data.familyCode && !data.familyPromptDismissed && (
+        <FamilyCodePrompt
+          onSave={onSetFamilyCode}
+          onDismiss={onDismissFamilyPrompt}
+        />
+      )}
+
       {data.players.length > 0 && (
         <ul className="grid gap-3 sm:grid-cols-2">
           {data.players.map((p) => {
@@ -81,7 +93,9 @@ export function PlayerPicker({
                     onClick={() => {
                       if (
                         window.confirm(
-                          `Remove pilot ${p.name} and their high scores?`,
+                          data.familyCode
+                            ? `Remove pilot ${p.name} from this device? Their scores stay on the family leaderboard.`
+                            : `Remove pilot ${p.name} and their high scores?`,
                         )
                       )
                         onRemove(p.id);
@@ -152,7 +166,9 @@ export function PlayerPicker({
       )}
 
       <p className="mt-auto text-center text-sm opacity-60">
-        Names and scores stay on this device.
+        {data.familyCode
+          ? "Pilots and scores are shared with your family's devices."
+          : "Names and scores stay on this device."}
       </p>
     </Screen>
   );

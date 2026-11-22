@@ -5,23 +5,59 @@ A space math game for kids. A problem appears at the bottom; asteroids carrying 
 - **12 steps:** add/subtract within 10 → 20 → two-digit (without, then with regrouping) → times tables → division facts → 9a/9b multi-digit multiplication → 10a/10b long division.
 - **Levels 9a–10b** use a "boss asteroid" and a big number pad instead, because picking from close numbers is not a fair test at that level. 5 problems per round, no clock, very slow fall, so there's time for paper.
 - **Move up** after a round with ≥ 80% accuracy, at least 8 problems answered (5 in boss rounds) and a shield left. Never moves back down. Any unlocked level can be replayed.
-- **Everything stays on the device** (localStorage): pilots (name only), unlocked levels and the top 10 scores per level. No accounts, no network calls.
+- **Saved on the device first** (localStorage): pilots (name only), unlocked levels and the top 10 scores per level. The game never waits for the network.
+- **Optional family leaderboard:** enter a family code once per device and pilots + high scores sync across all your devices (via Supabase). Offline or wrong code? The game keeps working with local scores and syncs later. See [Family leaderboard setup](#family-leaderboard-setup).
 
 **Tip for iPad/iPhone:** open the site in Safari → Share → **Add to Home Screen**, and play from that icon. Safari may clear saved data for websites you haven't opened in 7 days. Home Screen apps are exempt from that rule.
 
 ### Where things live
 
-| What                                        | File                   |
-| ------------------------------------------- | ---------------------- |
-| Levels, fall speeds, round length           | `src/game/levels.ts`   |
-| Problem generator + plausible wrong answers | `src/game/problems.ts` |
-| Points, accuracy, "move up?" rule           | `src/game/scoring.ts`  |
-| Round rules (taps, shields, clock)          | `src/game/round.ts`    |
-| Saving players and high scores              | `src/game/storage.ts`  |
-| Screens                                     | `src/components/`      |
-| Sound effects (generated in code)           | `src/lib/sound.ts`     |
+| What                                                        | File                   |
+| ----------------------------------------------------------- | ---------------------- |
+| Levels, fall speeds, round length                           | `src/game/levels.ts`   |
+| Problem generator + plausible wrong answers                 | `src/game/problems.ts` |
+| Points, accuracy, "move up?" rule                           | `src/game/scoring.ts`  |
+| Round rules (taps, shields, clock)                          | `src/game/round.ts`    |
+| Saving players and high scores                              | `src/game/storage.ts`  |
+| Merging device data with the leaderboard                    | `src/game/sync.ts`     |
+| Browser → API calls (never blocks play)                     | `src/lib/sync.ts`      |
+| API routes (`/api/sync`, `/api/leaderboard`, `/api/health`) | `src/app/api/`         |
+| Server-only Supabase code                                   | `src/server/`          |
+| Database tables                                             | `supabase/migrations/` |
+| Screens                                                     | `src/components/`      |
+| Sound effects (generated in code)                           | `src/lib/sound.ts`     |
 
 Too fast or too slow for your kid? Change `fallSeconds` in `src/game/levels.ts`.
+
+## Family leaderboard setup
+
+**How it works:** the browser only ever talks to this app's own server routes (`/api/...`). Those routes check the family code and then talk to Supabase with a secret key that never leaves the server. The database tables have Row Level Security on with no policies, so Supabase's public key can't read or write them at all.
+
+```
+iPad / phone ──(family code)──▶ Next.js /api/* on Vercel ──(secret key)──▶ Supabase
+```
+
+Tables are prefixed `math_`, so other apps can share the same Supabase project.
+
+1. **Create (or reuse) a Supabase project** at [supabase.com](https://supabase.com). The free plan is fine.
+2. **Create the tables.** Supabase → **SQL Editor** → **New query** → paste all of [`supabase/migrations/20261122000000_math_leaderboard.sql`](supabase/migrations/20261122000000_math_leaderboard.sql) → **Run**. It's safe to run again.
+3. **Copy two values** from Supabase → **Project Settings**:
+   - **Data API** → Project URL → this is `SUPABASE_URL`.
+   - **API Keys** → **Secret keys** → create or reveal one (starts with `sb_secret_`) → this is `SUPABASE_SECRET_KEY`. Treat it like a password.
+4. **Pick a family code** — any phrase, e.g. three random words. This is `FAMILY_CODE`. Anyone with it can add scores, so don't post it publicly.
+5. **Add all three to Vercel:** Project → **Settings → Environment Variables** → add `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `FAMILY_CODE` (no `NEXT_PUBLIC_` prefix!) → **Redeploy** so they take effect.
+6. **Locally (optional):** `cp .env.example .env.local`, fill in the same three values, then `npm run dev`.
+7. **Check it:** open `https://math.mikemercado.com/api/health` → should show `{"ok":true}`. `{"ok":false,"error":"not-configured"}` means an env var is missing; `database-unavailable` means the URL/key is wrong, the tables don't exist, or the project is paused.
+8. **On each device:** open the game → type the family code in the "Share scores with your family?" card (or later: **🏆 High scores → Add family code**). Existing pilots and scores upload automatically; pilots from other devices appear.
+
+**Keeping the free project awake:** Supabase pauses free projects after 7 days with no activity. [`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) calls `/api/health` every day. You can run it by hand from GitHub → **Actions** → **Keep Supabase awake** → **Run workflow**. Note: GitHub turns off scheduled workflows in a repo with no commits for 60 days. If that happens, GitHub emails you; re-enable it on the Actions tab.
+
+**Good to know**
+
+- Pilots with the same name (ignoring capitals) on different devices become one pilot.
+- Removing a pilot removes them from **this device** only. Their scores stay on the family leaderboard. To delete them everywhere, delete the row in Supabase → Table Editor → `math_pilots` (their scores go with it).
+- Unlocked levels are still per device. A pilot downloaded to a new device starts at level 1.
+- Changing the family code: 🏆 High scores → **Change family code**. Clearing the box turns sharing off on that device.
 
 ---
 

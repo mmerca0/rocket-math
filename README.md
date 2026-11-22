@@ -40,7 +40,12 @@ iPad / phone ──(family code)──▶ Next.js /api/* on Vercel ──(secret
 Tables are prefixed `math_`, so other apps can share the same Supabase project.
 
 1. **Create (or reuse) a Supabase project** at [supabase.com](https://supabase.com). The free plan is fine.
-2. **Create the tables.** Supabase → **SQL Editor** → **New query** → paste all of [`supabase/migrations/20261122000000_math_leaderboard.sql`](supabase/migrations/20261122000000_math_leaderboard.sql) → **Run**. It's safe to run again.
+2. **Create the tables.** Supabase → **SQL Editor** → **New query** → paste all of each file in [`supabase/migrations/`](supabase/migrations/), **oldest first** (the filename starts with the date), and **Run** each one:
+   1. [`20261122000000_math_leaderboard.sql`](supabase/migrations/20261122000000_math_leaderboard.sql) — creates the tables and turns on Row Level Security.
+   2. [`20261122010000_math_grants.sql`](supabase/migrations/20261122010000_math_grants.sql) — lets the server's secret key use the tables. Skip it and the server gets `42501 permission denied for table math_pilots`.
+
+   Every file is safe to run again.
+
 3. **Copy two values** from Supabase → **Project Settings**:
    - **Data API** → Project URL → this is `SUPABASE_URL`.
    - **API Keys** → **Secret keys** → create or reveal one (starts with `sb_secret_`) → this is `SUPABASE_SECRET_KEY`. Treat it like a password.
@@ -51,6 +56,22 @@ Tables are prefixed `math_`, so other apps can share the same Supabase project.
 8. **On each device:** open the game → type the family code in the "Share scores with your family?" card (or later: **🏆 High scores → Add family code**). Existing pilots and scores upload automatically; pilots from other devices appear.
 
 **Keeping the free project awake:** Supabase pauses free projects after 7 days with no activity. [`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) calls `/api/health` every day. You can run it by hand from GitHub → **Actions** → **Keep Supabase awake** → **Run workflow**. Note: GitHub turns off scheduled workflows in a repo with no commits for 60 days. If that happens, GitHub emails you; re-enable it on the Actions tab.
+
+**Adding a new table**
+
+Some Supabase projects don't give the API roles access to new tables automatically, and Row Level Security doesn't change that: RLS decides _which rows_ a role can see, while `GRANT` decides whether it can touch _the table at all_. So every new table needs both. In a **new** migration file (never edit one that's already been run), after `create table`:
+
+```sql
+alter table public.math_example enable row level security;
+
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.math_example to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
+revoke all on table public.math_example from anon, authenticated;
+```
+
+Name it `supabase/migrations/YYYYMMDDHHMMSS_math_<what>.sql` so it sorts after the others, keep it safe to run twice (`if not exists`, `grant`, `revoke`), run it in the SQL Editor, and list it in step 2 above.
 
 **Good to know**
 

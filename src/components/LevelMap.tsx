@@ -2,7 +2,9 @@
 
 import { LEVELS, type Level } from "@/game/levels";
 import { bestScore, type Player, type SaveData } from "@/game/storage";
-import { LockIcon, Planet } from "./art";
+import { getPlanet } from "@/game/planets";
+import { LockIcon } from "./art";
+import { PlanetArt } from "./PlanetArt";
 import { Button, MuteButton, Screen } from "./ui";
 
 export function LevelMap({
@@ -75,7 +77,10 @@ export function LevelMap({
                 <span className="flex items-center gap-1 text-sm font-black tracking-widest uppercase opacity-70">
                   Level {level.id} {locked && <LockIcon />}
                 </span>
-                <Planet color={level.color} locked={locked} />
+                <PlanetArt
+                  theme={getPlanet(level.id)}
+                  className={`size-20 sm:size-24 ${locked ? "grayscale" : ""}`}
+                />
                 <span className="text-lg leading-tight font-extrabold">
                   {level.planet}
                 </span>

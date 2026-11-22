@@ -7,7 +7,12 @@ import {
   useRef,
   type CSSProperties,
 } from "react";
-import { SHIELDS_PER_ROUND, type Level } from "@/game/levels";
+import {
+  SHIELDS_PER_ROUND,
+  TAP_ROUND_SECONDS,
+  type Level,
+} from "@/game/levels";
+import { GAME_PLANET_OPACITY, getPlanet, skyBackground } from "@/game/planets";
 import { problemText, type Problem } from "@/game/problems";
 import {
   createRound,
@@ -17,8 +22,16 @@ import {
   type RoundState,
 } from "@/game/round";
 import { playSound } from "@/lib/sound";
-import { AsteroidShape, ROCK_COLORS, Rocket, Shield } from "./art";
+import {
+  AsteroidShape,
+  BOSS_ROCK_COLOR,
+  ROCK_COLORS,
+  Rocket,
+  Shield,
+} from "./art";
 import { Keypad } from "./Keypad";
+import { PlanetBackdrop } from "./PlanetArt";
+import { TimerBar } from "./TimerBar";
 import { Button, MuteButton } from "./ui";
 
 /** How much of the fall is left (1 = just appeared, 0 = landed), read from the CSS animation. */
@@ -123,14 +136,22 @@ export function GameScreen({
   }, []);
 
   const isType = level.mode === "type";
+  const planet = getPlanet(level.id);
   const inputDisabled = paused || status !== "playing";
 
   return (
     <div
-      className={`space fixed inset-0 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-white select-none ${paused ? "game-paused" : ""}`}
+      style={{ background: skyBackground(planet) }}
+      className={`fixed inset-0 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-white select-none ${paused ? "game-paused" : ""}`}
     >
-      {/* Top bar */}
-      <header className="flex items-center gap-2 px-3 py-2">
+      <PlanetBackdrop
+        theme={planet}
+        planetOpacity={GAME_PLANET_OPACITY}
+        side={isType ? "left" : "right"}
+      />
+
+      {/* Top bar ("relative" keeps it in front of the planet backdrop) */}
+      <header className="relative flex items-center gap-2 px-3 py-2">
         <button
           type="button"
           onClick={() => dispatch({ type: "pause" })}
@@ -150,15 +171,15 @@ export function GameScreen({
           ))}
         </div>
         <div className="ml-auto text-right leading-tight">
-          <div className="text-xs font-semibold tracking-widest text-white/60 uppercase">
+          <div className="text-xs font-semibold tracking-widest text-white/70 uppercase">
             Score
           </div>
           <div className="text-2xl font-black tabular-nums" aria-live="polite">
             {state.stats.score}
           </div>
         </div>
-        <div className="min-w-16 text-right leading-tight">
-          <div className="text-xs font-semibold tracking-widest text-white/60 uppercase">
+        <div className="min-w-16 text-right leading-tight sm:min-w-24">
+          <div className="text-xs font-semibold tracking-widest text-white/70 uppercase">
             {isType ? "Rock" : "Time"}
           </div>
           <div className="text-2xl font-black tabular-nums">
@@ -166,6 +187,12 @@ export function GameScreen({
               ? formatTime(state.timeLeftMs)
               : `${Math.min(state.stats.correct + state.stats.missed + (status === "playing" ? 1 : 0), 5)}/5`}
           </div>
+          {state.timeLeftMs !== null && (
+            <TimerBar
+              timeLeftMs={state.timeLeftMs}
+              totalMs={TAP_ROUND_SECONDS * 1000}
+            />
+          )}
         </div>
         <MuteButton
           muted={muted}
@@ -175,11 +202,31 @@ export function GameScreen({
       </header>
 
       <div
-        className={`flex min-h-0 flex-1 flex-col ${isType ? "landscape:flex-row" : ""}`}
+        className={`relative flex min-h-0 flex-1 flex-col ${isType ? "landscape:flex-row" : ""}`}
       >
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Play field */}
           <div className="relative min-h-0 flex-1 overflow-hidden">
+            {/* Planet surface the rocks must not reach (drawn behind them) */}
+            <svg
+              viewBox="0 0 400 24"
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-5 w-full sm:h-7"
+              aria-hidden="true"
+            >
+              <path
+                d="M0 10 Q50 2 100 8 T200 8 T300 6 T400 9 V24 H0 Z"
+                fill={planet.ground}
+              />
+              <path
+                d="M0 10 Q50 2 100 8 T200 8 T300 6 T400 9"
+                fill="none"
+                stroke={planet.groundEdge}
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+
             {wave.asteroids.map((a) =>
               isType ? (
                 <BossAsteroid
@@ -205,15 +252,13 @@ export function GameScreen({
                 />
               ),
             )}
-
-            {/* Planet surface the rocks must not reach */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t from-cyan-400/60 to-transparent" />
           </div>
 
           {/* Problem panel */}
           <section
             aria-label="Problem"
-            className="flex shrink-0 flex-col items-center border-t border-white/10 bg-indigo-950/80 px-4 pt-1 pb-3"
+            style={{ backgroundColor: planet.panel }}
+            className="flex shrink-0 flex-col items-center border-t border-white/10 px-4 pt-1 pb-3"
           >
             {/* Messages live here (fixed height) so they never cover an asteroid. */}
             <div
@@ -244,7 +289,10 @@ export function GameScreen({
 
         {/* Number pad: below in portrait, on the right in landscape */}
         {isType && (
-          <div className="flex shrink-0 justify-center bg-indigo-950/80 px-4 pb-3 landscape:w-[min(44vw,24rem)] landscape:items-center landscape:border-l landscape:border-white/10 landscape:py-3">
+          <div
+            style={{ backgroundColor: planet.panel }}
+            className="flex shrink-0 justify-center px-4 pb-3 landscape:w-[min(44vw,24rem)] landscape:items-center landscape:border-l landscape:border-white/10 landscape:py-3"
+          >
             <div className="w-full max-w-sm">
               <Keypad
                 value={state.input}
@@ -410,7 +458,7 @@ function BossAsteroid({
         aria-hidden="true"
       >
         <span className="spin absolute inset-0 block">
-          <AsteroidShape color={{ fill: "#94a3b8", dark: "#475569" }} />
+          <AsteroidShape color={BOSS_ROCK_COLOR} />
         </span>
         <span className="relative text-[clamp(2.5rem,min(10vw,8vh),4.5rem)] font-black text-slate-900">
           ?

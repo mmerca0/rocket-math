@@ -153,8 +153,7 @@ The app's name lives in **one place**: [`src/config/site.ts`](src/config/site.ts
 - [ ] **Clone and install.**
   ```bash
   git clone https://github.com/<you>/<new-app>.git
-  cd <new-app>
-  nvm use          # Windows: nvm use 26
+  cd <new-app>     # fnm switches to the Node version in .nvmrc by itself
   npm install
   ```
 - [ ] **Rename.** Change `name` in `src/config/site.ts`. Also change `"name"` in `package.json` (lowercase, dashes — e.g. `"habit-tracker"`).
@@ -171,7 +170,7 @@ The app's name lives in **one place**: [`src/config/site.ts`](src/config/site.ts
 
 ## New machine setup
 
-Do this once per computer. Node version comes from `.nvmrc` (Node 26, the current LTS).
+Do this once per computer. Node versions are managed by [fnm](https://github.com/Schniz/fnm). Each project's `.nvmrc` says which version it needs (Node 26, the current LTS), and fnm switches to it automatically whenever you `cd` into the folder. You never type a "use" command.
 
 ### Mac
 
@@ -182,17 +181,16 @@ xcode-select --install
 # 2. Homebrew (package manager) — then follow the "Next steps" it prints
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# 3. nvm (Node version manager)
-brew install nvm
-mkdir -p ~/.nvm
+# 3. fnm (Node version manager) — switches Node automatically on cd
+brew install fnm
 cat >> ~/.zshrc <<'ZSH'
-export NVM_DIR="$HOME/.nvm"
-[ -s "$(brew --prefix nvm)/nvm.sh" ] && . "$(brew --prefix nvm)/nvm.sh"
+# fnm (Node version manager)
+eval "$(fnm env --use-on-cd --version-file-strategy=recursive)"
 ZSH
 source ~/.zshrc
 
 # 4. Node LTS + GitHub CLI
-nvm install --lts
+fnm install --lts
 brew install gh
 gh auth login
 
@@ -204,8 +202,7 @@ git config --global core.autocrlf input
 
 # 6. Get a project running
 gh repo clone <you>/<repo>
-cd <repo>
-nvm use
+cd <repo>          # fnm switches Node here; if it offers to install the version, answer y
 npm install
 npm run dev
 ```
@@ -213,15 +210,18 @@ npm run dev
 ### Windows (PowerShell)
 
 ```powershell
-# 1. Git, nvm-windows, GitHub CLI, VS Code (winget is built into Windows 10/11)
+# 1. Git, fnm, GitHub CLI, VS Code (winget is built into Windows 10/11)
 winget install --id Git.Git -e
-winget install --id CoreyButler.NVMforWindows -e
+winget install --id Schniz.fnm -e
 winget install --id GitHub.cli -e
 winget install --id Microsoft.VisualStudioCode -e
 
-# 2. Close and reopen PowerShell (as Administrator for this step), then:
-nvm install 26
-nvm use 26
+# 2. Close and reopen PowerShell, then make fnm switch Node automatically on cd:
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # lets PowerShell run your profile
+if (-not (Test-Path $PROFILE)) { New-Item $PROFILE -Force }
+Add-Content $PROFILE 'fnm env --use-on-cd --version-file-strategy=recursive --shell powershell | Out-String | Invoke-Expression'
+. $PROFILE
+fnm install --lts
 
 # 3. Git identity and line endings
 git config --global user.name "Your Name"
@@ -230,9 +230,9 @@ git config --global init.defaultBranch main
 git config --global core.autocrlf false
 gh auth login
 
-# 4. Get a project running (normal PowerShell)
+# 4. Get a project running
 gh repo clone <you>/<repo>
-cd <repo>
+cd <repo>          # fnm switches Node here; if it offers to install the version, answer y
 npm install
 npm run dev
 ```

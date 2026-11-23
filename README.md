@@ -33,11 +33,11 @@ Too fast or too slow for your kid? Change `fallSeconds` in `src/game/levels.ts`.
 
 Run the game on your Mac while you work on it. First time on a new computer? Do [New machine setup](#new-machine-setup) first.
 
-1. **Open Terminal in the project folder** and switch to the right Node version (read from `.nvmrc`):
+1. **Open Terminal in the project folder:**
    ```bash
    cd ~/code/rocket-math
-   nvm use
    ```
+   [fnm](https://github.com/Schniz/fnm) switches to the right Node version automatically as soon as you enter the folder (it reads `.nvmrc`), so there's nothing else to type. Check with `node -v`; it should start with `v26`.
 2. **Install the packages** (first time, and again whenever `package.json` changes, e.g. after pulling a Dependabot update):
    ```bash
    npm install

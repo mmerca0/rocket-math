@@ -29,6 +29,44 @@ A space math game for kids. A problem appears at the bottom; asteroids carrying 
 
 Too fast or too slow for your kid? Change `fallSeconds` in `src/game/levels.ts`.
 
+## Local development
+
+Run the game on your Mac while you work on it. First time on a new computer? Do [New machine setup](#new-machine-setup) first.
+
+1. **Open Terminal in the project folder:**
+   ```bash
+   cd ~/code/rocket-math
+   ```
+   [fnm](https://github.com/Schniz/fnm) switches to the right Node version automatically as soon as you enter the folder (it reads `.nvmrc`), so there's nothing else to type. Check with `node -v`; it should start with `v26`.
+2. **Install the packages** (first time, and again whenever `package.json` changes, e.g. after pulling a Dependabot update):
+   ```bash
+   npm install
+   ```
+3. **Start the game:**
+   ```bash
+   npm run dev
+   ```
+4. **Open [http://localhost:3000](http://localhost:3000)** in your browser. Save a file and the page updates by itself. Press **Ctrl + C** in Terminal to stop the server.
+
+**The leaderboard runs in offline mode locally.** The Supabase keys (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `FAMILY_CODE`) are stored only in Vercel, not on your Mac. Without them, the `/api/...` routes answer `not-configured`, and the game acts as it does with no internet: you can play normally, and pilots and scores are saved in this browser only. If you type a family code, it shows as offline. That's expected. You'll see the same thing at [http://localhost:3000/api/health](http://localhost:3000/api/health): `{"ok":false,"error":"not-configured"}`. To test the real leaderboard locally, see step 6 of [Family leaderboard setup](#family-leaderboard-setup). Usually it's easier to test it on the Vercel preview URL that every pull request gets.
+
+**Before you open a pull request, run all the checks:**
+
+```bash
+npm run check
+```
+
+It runs four checks in a row and stops at the first one that fails:
+
+| Step                | What it checks                                     |
+| ------------------- | -------------------------------------------------- |
+| `npm run lint`      | Code mistakes (ESLint) and formatting (Prettier)   |
+| `npm run typecheck` | TypeScript types                                   |
+| `npm run test`      | The Vitest tests (`*.test.ts(x)` next to the code) |
+| `npm run build`     | The production build works, just like Vercel's     |
+
+If only formatting fails, `npm run format` fixes it for you. GitHub runs the same checks on every pull request.
+
 ## Family leaderboard setup
 
 **How it works:** the browser only ever talks to this app's own server routes (`/api/...`). Those routes check the family code and then talk to Supabase with a secret key that never leaves the server. The database tables have Row Level Security on with no policies, so Supabase's public key can't read or write them at all.
